@@ -1,18 +1,16 @@
 package directio
 
-import language.experimental.erasedDefinitions
-import language.experimental.saferExceptions
 import directio.Async.unsafe
 
-erased trait Sync
+sealed trait Sync
 object Sync:
     object unsafe:
-        given Sync = compiletime.erasedValue
+        given Sync = new {}
 
-erased trait Async extends Sync
+sealed trait Async extends Sync
 object Async:
     object unsafe:
-        given Async = compiletime.erasedValue
+        given Async = new {}
 
 type NonBlocking[+T] = Sync ?=> T
 object NonBlocking:
@@ -20,12 +18,14 @@ object NonBlocking:
         import Sync.unsafe.given
         f
 
-type Blocking[+T] = (Async, CanThrow[InterruptedException]) ?=> T
+type Blocking[+T] = Async ?=> T
 object Blocking:
-    inline def run[T](inline f: Blocking[T]): T throws InterruptedException =
+    @throws[InterruptedException]
+    inline def run[T](inline f: Blocking[T]): T =
         import Async.unsafe.given
         f
 
-    inline def runUnsafeExceptions[T](inline f: Blocking[T]): T =
-        import unsafeExceptions.given
-        run(f)
+opaque type IO[+T] = () => Blocking[T]
+object IO:
+    inline def apply[T](inline block: Blocking[T]): IO[T] =
+        () => block
