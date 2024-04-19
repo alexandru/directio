@@ -2,7 +2,13 @@ package directio
 
 import java.util.concurrent.atomic.AtomicReference
 
+/** A mutable reference that can be updated atomically and safely.
+  *
+  * Wraps `java.util.concurrent.atomic.AtomicReference` in a safer
+  * API.
+  */
 opaque type Ref[A] = AtomicReference[A]
+
 object Ref:
     def apply[A](initialValue: A): NonBlocking[Ref[A]] =
         AtomicReference(initialValue)

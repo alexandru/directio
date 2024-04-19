@@ -20,8 +20,18 @@ object Cancellable:
         new Cancellable:
             def cancel() = ()
 
-class MultiAssignCancellable(ref: Ref[Null | Cancellable | Unit])
+final class MultiAssignCancellable(ref: Ref[Null | Cancellable | Unit])
     extends Cancellable:
+
+    def isCancelled: NonBlocking[Boolean] =
+        ref.get match
+            case () => true
+            case null | _: Cancellable => false
+
+    def clear(): NonBlocking[Unit] =
+        ref.update:
+            case _: Cancellable | null => null
+            case () => ()
 
     def set(value: Cancellable): Blocking[Unit] =
         ref.modify:

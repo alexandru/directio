@@ -1,5 +1,6 @@
 package directio
 
+import directio.util.*
 import scala.collection.immutable.Queue
 
 final class Deferred[A](
@@ -43,13 +44,14 @@ final class Deferred[A](
             logAndIgnoreExceptions(cb(outcome))
 
     def completeWith(body: Blocking[A]): Blocking[Unit] =
-        val r = try
-            Outcome.Success(body)
-        catch
-            case e: InterruptedException =>
-                Outcome.Cancelled(e)
-            case e: Throwable =>
-                Outcome.Failure(e)
+        val r =
+            try
+                Outcome.Success(body)
+            catch
+                case e: InterruptedException =>
+                    Outcome.Cancelled(e)
+                case e: Throwable =>
+                    Outcome.Failure(e)
         complete(r)
 end Deferred
 
