@@ -20,7 +20,7 @@ object Cancellable:
         new Cancellable:
             def cancel() = ()
 
-final class MultiAssignCancellable(ref: Ref[Null | Cancellable | Unit])
+final class MultiAssignCancellable private (ref: Ref[Null | Cancellable | Unit])
     extends Cancellable:
 
     def isCancelled: NonBlocking[Boolean] =

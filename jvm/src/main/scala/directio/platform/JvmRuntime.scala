@@ -1,6 +1,8 @@
 package directio
 package platform
 
+import scala.util.control.NonFatal
+
 private[directio] class JvmRuntime extends Runtime:
     private given Runtime = this
 
@@ -9,6 +11,10 @@ private[directio] class JvmRuntime extends Runtime:
         th.getUncaughtExceptionHandler().uncaughtException(th, cause)
 
     private def cancelThread(th: Thread): Blocking[Unit] =
+        // Are we cancelling the fiber from within itself?
+        if Thread.currentThread().threadId() == th.threadId() then
+            throw InterruptedException()
+
         var wasInterrupted = false
         while th.isAlive() do
             try
@@ -32,20 +38,31 @@ private[directio] class JvmRuntime extends Runtime:
                 deferred.awaitComplete()
 
             def cancel(): Blocking[Unit] =
-                var wasInterrupted = false
-                while th.isAlive() do
-                    try
-                        th.interrupt()
-                        th.join(200)
-                        wasInterrupted ||= Thread.interrupted()
-                    catch
-                        case e: InterruptedException =>
-                            wasInterrupted = true
-                if wasInterrupted then
-                    throw InterruptedException()
+                cancelThread(th)
 
         th.start()
         fiber
+
+    def guaranteeCase[T](block: Blocking[T])(finalizer: Outcome[T] => Blocking[Unit]): Blocking[T] =
+        var isFinalizerException = false
+        try
+            val ret = block
+            isFinalizerException = true
+            finalizer(Outcome.Success(ret))
+            ret
+        catch
+            case NonFatal(e) if !isFinalizerException =>
+                try
+                    finalizer(Outcome.Failure(e))
+                catch case NonFatal(e2) =>
+                    e.addSuppressed(e2)
+                throw e
+            case e: InterruptedException if !isFinalizerException =>
+                try
+                    finalizer(Outcome.Cancelled(e))
+                catch case NonFatal(e2) =>
+                    e.addSuppressed(e2)
+                throw e
 
     def uncancellable[A](block: Poll[A] => Blocking[A]): Blocking[A] =
         val cancel = MultiAssignCancellable()
@@ -57,8 +74,6 @@ private[directio] class JvmRuntime extends Runtime:
 
             if cancel.isCancelled then throw InterruptedException()
             cancel.set(Cancellable:
-                if th == Thread.currentThread() then
-                    throw InterruptedException()
                 cancelThread(th)
             )
             try
@@ -79,6 +94,7 @@ private[directio] class JvmRuntime extends Runtime:
                 wasCancelled ||= Thread.interrupted()
             catch
                 case e: InterruptedException =>
+                    Thread.interrupted()
                     wasCancelled = true
             if wasCancelled then
                 cancel.cancel()

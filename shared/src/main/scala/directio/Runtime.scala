@@ -13,4 +13,5 @@ end Runtime
 private[directio] trait RuntimeCompanion:
     def global: Runtime
 
-object Runtime extends RuntimeCompanion with directio.platform.RuntimeCompanionPerPlatform
+object Runtime extends RuntimeCompanion
+    with directio.platform.RuntimeCompanionPerPlatform

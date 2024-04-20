@@ -1,9 +1,11 @@
 package directio
 package util
 
+import scala.util.control.NonFatal
+
 inline def logAndIgnoreExceptions(
     f: Blocking[Unit]
 )(using FailureReporter): Blocking[Unit] =
     try f
     catch
-        case NonInterrupting(e) => summon[FailureReporter].reportFailure(e)
+        case NonFatal(e) => summon[FailureReporter].reportFailure(e)
