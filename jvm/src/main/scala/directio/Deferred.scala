@@ -1,11 +1,10 @@
 package directio
 
-import directio.util.*
 import scala.collection.immutable.Queue
 
 final class Deferred[A](
     ref: Ref[Outcome[A] | Queue[Callback[A]]]
-)(using FailureReporter):
+):
     private def unregister(cb: Callback[A]): NonBlocking[Unit] =
         ref.update:
             case queue: Queue[Callback[A]] => queue.filterNot(_ == cb)
@@ -56,5 +55,5 @@ final class Deferred[A](
 end Deferred
 
 object Deferred:
-    def apply[A]()(using FailureReporter): NonBlocking[Deferred[A]] =
+    def apply[A](): NonBlocking[Deferred[A]] =
         new Deferred(Ref(Queue.empty))

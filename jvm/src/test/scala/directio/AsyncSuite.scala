@@ -3,14 +3,14 @@ package directio
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
-class RuntimeSuite extends munit.FunSuite:
-    test("start works"):
+class AsyncSuite extends munit.FunSuite:
+    test("forkUnsafe works"):
         Blocking.run:
             val gogo = new CountDownLatch(1)
             val fiberStarted = new CountDownLatch(1)
             val ref = Ref(10)
 
-            val fiber = Runtime.global.start:
+            val fiber = summon[Async].forkUnsafe: _ =>
                 fiberStarted.countDown()
                 gogo.await()
                 ref.updateAndGet(_ + 10)
@@ -21,11 +21,11 @@ class RuntimeSuite extends munit.FunSuite:
             assertEquals(fiber.join(), Outcome.Success(20))
             assertEquals(ref.get, 20)
 
-    test("start is cancellable"):
+    test("forkUnsafe is cancellable"):
         Blocking.run:
             val wasStarted = new CountDownLatch(1)
             var wasCancelled = false
-            val fiber = Runtime.global.start:
+            val fiber = summon[Async].forkUnsafe: _ =>
                 wasStarted.countDown()
                 try
                     Thread.sleep(10000)
@@ -46,15 +46,16 @@ class RuntimeSuite extends munit.FunSuite:
         val step3InPoll = new CountDownLatch(1)
         val wasCancelled = new CountDownLatch(1)
         Blocking.run:
-            val fiber = Runtime.global.start:
-                Runtime.global.uncancellable: poll =>
+            val fiber = summon[Async].forkUnsafe: _ =>
+                uncancellable: poll =>
                     try
                         step1FiberStarted.countDown()
                         step2AwaitSome.await()
                         poll:
                             step3InPoll.await(5000, TimeUnit.MILLISECONDS)
-                    catch case _: InterruptedException =>
-                        wasCancelled.countDown()
+                    catch
+                        case _: InterruptedException =>
+                            wasCancelled.countDown()
 
             step1FiberStarted.await()
             step2AwaitSome.countDown()
@@ -67,15 +68,17 @@ class RuntimeSuite extends munit.FunSuite:
         val step2InPoll = new CountDownLatch(1)
         val wasCancelled = new CountDownLatch(1)
         Blocking.run:
-            val fiber = Runtime.global.start:
-                Runtime.global.uncancellable: poll =>
+            val fiber = summon[Async].forkUnsafe: _ =>
+                uncancellable: poll =>
                     try
                         poll:
                             step1FiberStarted.countDown()
                             step2InPoll.await(5000, TimeUnit.MILLISECONDS)
-                    catch case _: InterruptedException =>
-                        wasCancelled.countDown()
+                    catch
+                        case _: InterruptedException =>
+                            wasCancelled.countDown()
 
             step1FiberStarted.await()
             fiber.cancel()
             assert(wasCancelled.await(50, TimeUnit.MILLISECONDS))
+end AsyncSuite

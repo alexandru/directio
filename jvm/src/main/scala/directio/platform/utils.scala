@@ -1,8 +1,7 @@
 package directio
 package platform
 
-private[directio]
-inline def keepTryingDespiteInterruption[A](block: Blocking[A]): Blocking[A] =
+private[directio] inline def keepTryingDespiteInterruption[A](block: Blocking[A]): Blocking[A] =
     var continue = true
     var ret: A | Null = null
     var wasInterrupted: Throwable | Null = null

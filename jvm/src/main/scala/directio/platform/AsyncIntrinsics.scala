@@ -3,13 +3,7 @@ package platform
 
 import scala.util.control.NonFatal
 
-private[directio] class JvmRuntime extends Runtime:
-    private given Runtime = this
-
-    def reportFailure(cause: Throwable): NonBlocking[Unit] =
-        val th = Thread.currentThread()
-        th.getUncaughtExceptionHandler().uncaughtException(th, cause)
-
+class AsyncIntrinsics extends SyncIntrinsics with Async:
     private def cancelThread(th: Thread): Blocking[Unit] =
         // Are we cancelling the fiber from within itself?
         if Thread.currentThread().threadId() == th.threadId() then
@@ -27,13 +21,16 @@ private[directio] class JvmRuntime extends Runtime:
         if wasInterrupted then
             throw InterruptedException()
 
-    def start[T](block: Blocking[T]): NonBlocking[Fiber[T]] =
+    def forkUnsafe[T](block: FiberId => Blocking[T]): NonBlocking[Fiber[T]] =
         val deferred = Deferred[T]()
+        val fiberId = FiberId.newId()
         val th = Thread.ofVirtual().unstarted(() =>
             Blocking.run:
-                deferred.completeWith(block)
+                deferred.completeWith(block(fiberId))
         )
         val fiber = new Fiber[T]:
+            val id = fiberId
+
             def join(): Blocking[Outcome[T]] =
                 deferred.awaitComplete()
 
@@ -54,22 +51,24 @@ private[directio] class JvmRuntime extends Runtime:
             case NonFatal(e) if !isFinalizerException =>
                 try
                     finalizer(Outcome.Failure(e))
-                catch case NonFatal(e2) =>
-                    e.addSuppressed(e2)
+                catch
+                    case NonFatal(e2) =>
+                        e.addSuppressed(e2)
                 throw e
             case e: InterruptedException if !isFinalizerException =>
                 try
                     finalizer(Outcome.Cancelled(e))
-                catch case NonFatal(e2) =>
-                    e.addSuppressed(e2)
+                catch
+                    case NonFatal(e2) =>
+                        e.addSuppressed(e2)
                 throw e
 
     def uncancellable[A](block: Poll[A] => Blocking[A]): Blocking[A] =
         val cancel = MultiAssignCancellable()
 
-        def poll(id: Long): Poll[A] = block =>
+        def poll(threadId: Long): Poll[A] = block =>
             val th = Thread.currentThread()
-            if th.threadId() != id then
+            if th.threadId() != threadId then
                 throw IllegalStateException("Poll reference leaked to a different fiber/thread")
 
             if cancel.isCancelled then throw InterruptedException()
@@ -81,7 +80,7 @@ private[directio] class JvmRuntime extends Runtime:
             finally
                 cancel.clear()
 
-        val fiber = start:
+        val fiber = forkUnsafe: _ =>
             val id = Thread.currentThread().threadId()
             block(poll(id))
 
@@ -100,7 +99,6 @@ private[directio] class JvmRuntime extends Runtime:
                 cancel.cancel()
 
         ret.getOrThrow
+    end uncancellable
 
-
-private[directio] trait RuntimeCompanionPerPlatform:
-    def global: Runtime = JvmRuntime()
+end AsyncIntrinsics
