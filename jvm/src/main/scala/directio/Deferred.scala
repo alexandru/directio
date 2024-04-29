@@ -10,6 +10,15 @@ final class Deferred[A](
             case queue: Queue[Callback[A]] => queue.filterNot(_ == cb)
             case other => other
 
+    def outcome: NonBlocking[Outcome[A] | Null] =
+        ref.get match
+            case o: Outcome[A] => o
+            case _ => null
+
+    def join(): Blocking[Unit] =
+        awaitComplete()
+        ()
+
     def awaitComplete(): Blocking[Outcome[A]] =
         val cbRef = BlockingCallback[A]()
         val token = onComplete(cbRef)

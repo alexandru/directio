@@ -21,10 +21,13 @@ def guaranteeCase[A](block: Blocking[A])(finalizer: Outcome[A] => Blocking[Unit]
     summon[Async].guaranteeCase(block)(finalizer)
 
 def fork[A](block: Blocking[A])(using Scope): Blocking[Fiber[A]] =
-    val fiber = summon[Async].forkUnsafe: id =>
+    val fiber = summon[Async].createCancellableFiber:
         try block
-        finally summon[Scope].unregister(id)
+        finally summon[Scope].unregister(summon[Fiber[A]])
 
     summon[Scope].register(fiber) match
         case outcome: Outcome[A] => Fiber.completed(outcome)
         case () => fiber
+
+    fiber.start()
+    fiber

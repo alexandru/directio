@@ -5,7 +5,10 @@ import directio.platform.*
 type Poll[A] = Blocking[A] => NonBlocking[A]
 
 trait Async extends Sync:
-    def forkUnsafe[A](block: FiberId => Blocking[A]): NonBlocking[Fiber[A]]
+    def createUncancellableFiber[A](block: Fiber[A] ?=> Blocking[A]): NonBlocking[Fiber[A]]
+    def createCancellableFiber[A](block: Fiber[A] ?=> Blocking[A]): NonBlocking[Fiber[A]]
+
+    def cede: Blocking[Unit]
 
     def uncancellable[A](block: Poll[A] => Blocking[A]): Blocking[A]
 

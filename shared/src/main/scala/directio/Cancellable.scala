@@ -3,14 +3,14 @@ package directio
 import java.util.concurrent.atomic.AtomicBoolean
 
 trait Cancellable:
-    def cancel(): Blocking[Unit]
+    def cancel(): NonBlocking[Unit]
 
 object Cancellable:
-    inline def apply(inline f: Blocking[Unit]): NonBlocking[Cancellable] =
+    inline def apply(inline f: NonBlocking[Unit]): NonBlocking[Cancellable] =
         new Cancellable:
             def cancel() = f
 
-    inline def idempotent(inline f: Blocking[Unit]): NonBlocking[Cancellable] =
+    inline def idempotent(inline f: NonBlocking[Unit]): NonBlocking[Cancellable] =
         new Cancellable:
             private val cancelled = AtomicBoolean(false)
             def cancel() =
@@ -33,7 +33,7 @@ final class MultiAssignCancellable private (ref: Ref[Null | Cancellable | Unit])
             case _: Cancellable | null => null
             case () => ()
 
-    def set(value: Cancellable): Blocking[Unit] =
+    def set(value: Cancellable): NonBlocking[Unit] =
         ref.modify:
             case null | _: Cancellable => (value, null)
             case () => ((), value)
@@ -41,7 +41,7 @@ final class MultiAssignCancellable private (ref: Ref[Null | Cancellable | Unit])
             case null => ()
             case c: Cancellable => c.cancel()
 
-    def cancel(): Blocking[Unit] =
+    def cancel(): NonBlocking[Unit] =
         ref.getAndSet(()) match
             case null | () => ()
             case c: Cancellable => c.cancel()

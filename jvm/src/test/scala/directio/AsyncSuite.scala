@@ -10,7 +10,7 @@ class AsyncSuite extends munit.FunSuite:
             val fiberStarted = new CountDownLatch(1)
             val ref = Ref(10)
 
-            val fiber = summon[Async].forkUnsafe: _ =>
+            val fiber = summon[Async].forkUnsafeInterruptible: _ =>
                 fiberStarted.countDown()
                 gogo.await()
                 ref.updateAndGet(_ + 10)
@@ -25,7 +25,7 @@ class AsyncSuite extends munit.FunSuite:
         Blocking.run:
             val wasStarted = new CountDownLatch(1)
             var wasCancelled = false
-            val fiber = summon[Async].forkUnsafe: _ =>
+            val fiber = summon[Async].forkUnsafeInterruptible: _ =>
                 wasStarted.countDown()
                 try
                     Thread.sleep(10000)
@@ -46,7 +46,7 @@ class AsyncSuite extends munit.FunSuite:
         val step3InPoll = new CountDownLatch(1)
         val wasCancelled = new CountDownLatch(1)
         Blocking.run:
-            val fiber = summon[Async].forkUnsafe: _ =>
+            val fiber = summon[Async].forkUnsafeInterruptible: _ =>
                 uncancellable: poll =>
                     try
                         step1FiberStarted.countDown()
@@ -68,7 +68,7 @@ class AsyncSuite extends munit.FunSuite:
         val step2InPoll = new CountDownLatch(1)
         val wasCancelled = new CountDownLatch(1)
         Blocking.run:
-            val fiber = summon[Async].forkUnsafe: _ =>
+            val fiber = summon[Async].forkUnsafeInterruptible: _ =>
                 uncancellable: poll =>
                     try
                         poll:
