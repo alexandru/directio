@@ -7,6 +7,7 @@ private[platform] trait JvmFiber[+A] extends Fiber[A]:
     def start(): NonBlocking[Unit]
 
 private[directio] class AsyncIntrinsics extends SyncIntrinsics with Async:
+
     private val threadFactory: Thread.Builder =
         Thread.ofVirtual()
             .name("directio-fiber")
@@ -36,7 +37,7 @@ private[directio] class AsyncIntrinsics extends SyncIntrinsics with Async:
         if Thread.interrupted() then
             throw InterruptedException()
 
-    def createUncancelableFiber[A](block: Fiber[A] ?=> Blocking[A]): NonBlocking[Fiber[A]] =
+    def createUncancellableFiber[A](block: Fiber[A] ?=> Blocking[A]): NonBlocking[Fiber[A]] =
         new JvmFiber[A]:
             self =>
             val id = FiberId.newId()
@@ -77,8 +78,12 @@ private[directio] class AsyncIntrinsics extends SyncIntrinsics with Async:
             def isActive = cancelRef.get == null
             def outcome = deferred.outcome
             def join() = deferred.join()
-            def cancel(): NonBlocking[Unit] =
-                if cancelRef.compareAndSet(null, InterruptedException()) then
+
+            def cancel(e: InterruptedException | Null): NonBlocking[Unit] =
+                val err = e match
+                    case null => InterruptedException()
+                    case e => e
+                if cancelRef.compareAndSet(null, err) then
                     th.interrupt()
 
     def guaranteeCase[T](block: Blocking[T])(finalizer: Outcome[T] => Blocking[Unit]): Blocking[T] =
