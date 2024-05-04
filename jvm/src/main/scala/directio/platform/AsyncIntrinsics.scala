@@ -15,6 +15,18 @@ private[directio] class AsyncIntrinsics extends SyncIntrinsics with Async:
                 NonBlocking.run(reportFailure(e))
             )
 
+    private val currentFiber: ThreadLocal[Fiber[_] | Null] =
+        ThreadLocal.withInitial(() => null)
+
+    private inline def withCurrentFiber[A](fiber: Fiber[?])(
+        inline block: Blocking[A]
+    ): Blocking[A] =
+        currentFiber.set(fiber)
+        try
+            block
+        finally
+            currentFiber.set(null)
+
     // private def cancelThreadMany(th: Thread): Blocking[Unit] =
     //     // Are we cancelling the fiber from within itself?
     //     if Thread.currentThread().threadId() == th.threadId() then
@@ -44,7 +56,9 @@ private[directio] class AsyncIntrinsics extends SyncIntrinsics with Async:
             private val deferred = Deferred[A]()
             private val thread = threadFactory.unstarted(() =>
                 Blocking.run:
-                    deferred.completeWith(block(using self))
+                    deferred.completeWith:
+                        withCurrentFiber(self):
+                            block(using self)
             )
             def isActive = true
             def start() = thread.start()
@@ -64,7 +78,8 @@ private[directio] class AsyncIntrinsics extends SyncIntrinsics with Async:
                 Blocking.run:
                     deferred.completeWith:
                         try
-                            block(using self)
+                            withCurrentFiber(self):
+                                block(using self)
                         catch
                             case e: InterruptedException =>
                                 cancelRef.get match
@@ -109,43 +124,69 @@ private[directio] class AsyncIntrinsics extends SyncIntrinsics with Async:
                         e.addSuppressed(e2)
                 throw e
 
-    def uncancellable[A](block: Poll[A] => Blocking[A]): Blocking[A] = ???
-    //     val cancel = MultiAssignCancellable()
+    def uncancellable[A](block: Poll[A] => Blocking[A]): Blocking[A] =
+        val cancel = MaskedCancellable()
 
-    //     def poll(threadId: Long): Poll[A] = block =>
-    //         val th = Thread.currentThread()
-    //         if th.threadId() != threadId then
-    //             throw IllegalStateException("Poll reference leaked to a different fiber/thread")
+        def poll(using Fiber[A]): Poll[A] = block =>
+            currentFiber.get() match
+                case null =>
+                    throw IllegalStateException("Poll reference leaked, no longer in a fiber")
+                case fb: Fiber[?] =>
+                    if fb.id != summon[Fiber[A]].id then
+                        throw IllegalStateException("Poll reference leaked to a different fiber")
 
-    //         if cancel.isCancelled then throw InterruptedException()
-    //         cancel.set(Cancellable:
-    //             th.interrupt()
-    //         )
-    //         try
-    //             block
-    //         finally
-    //             cancel.clear()
+            if cancel.isCancelled then throw InterruptedException()
+            var result: Outcome[A] | Null = null
+            val th = threadFactory.unstarted(() =>
+                Blocking.run:
+                    withCurrentFiber(summon[Fiber[A]]):
+                        try
+                            result = Outcome.Success(block)
+                        catch
+                            case e: InterruptedException =>
+                                result = Outcome.Cancelled(e)
+                            case NonFatal(e) =>
+                                result = Outcome.Failure(e)
+            )
+            cancel.withCancellableThread(th):
+                th.start()
+                var wasCancelled = false
+                while th.isAlive() do
+                    try
+                        th.join()
+                    catch
+                        case e: InterruptedException =>
+                            if !wasCancelled then
+                                wasCancelled = true
+                                cancel.cancel()
 
-    //     val fiber = startInterruptible:
-    //         val id = Thread.currentThread().threadId()
-    //         block(poll(id))
+                wasCancelled ||= Thread.interrupted()
+                if wasCancelled then
+                    throw InterruptedException()
+                else
+                    result match
+                        case null => throw InterruptedException()
+                        case res => res.getOrThrow
 
-    //     var wasCancelled = false
-    //     var ret: Outcome[A] | Null = null
+        val fiber = createCancellableFiber:
+            block(poll)
+        fiber.start()
 
-    //     while ret == null do
-    //         try
-    //             fiber.join()
-    //             ret = fiber.outcome.nn
-    //             wasCancelled ||= Thread.interrupted()
-    //         catch
-    //             case e: InterruptedException =>
-    //                 Thread.interrupted()
-    //                 wasCancelled = true
-    //         if wasCancelled then
-    //             cancel.cancel()
+        var wasCancelled = false
+        var ret: Outcome[A] | Null = null
+        while ret == null do
+            try
+                fiber.join()
+                ret = fiber.outcome.nn
+                wasCancelled ||= Thread.interrupted()
+            catch
+                case e: InterruptedException =>
+                    Thread.interrupted()
+                    wasCancelled = true
+            if wasCancelled then
+                cancel.cancel()
 
-    //     ret.getOrThrow
-    // end uncancellable
+        ret.getOrThrow
+    end uncancellable
 
 end AsyncIntrinsics

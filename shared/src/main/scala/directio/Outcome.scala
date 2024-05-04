@@ -5,6 +5,10 @@ enum Outcome[+A]:
     case Failure(exception: Throwable) extends Outcome[Nothing]
     case Cancelled(exception: InterruptedException) extends Outcome[Nothing]
 
+    def isCancelled: Boolean = this match
+        case Cancelled(_) => true
+        case _ => false
+
     def getOrThrow: A = this match
         case Success(a) => a
         case Failure(e) => throw e

@@ -17,6 +17,9 @@ object Ref:
         def get: NonBlocking[State] =
             ref.get
 
+        def set(value: State): NonBlocking[Unit] =
+            ref.set(value)
+
         def compareAndSet(expect: State, update: State): NonBlocking[Boolean] =
             ref.compareAndSet(expect, update)
 

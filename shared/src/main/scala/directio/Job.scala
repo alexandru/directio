@@ -10,6 +10,9 @@ trait Job[+A]:
         join()
         outcome.nn
 
+    final def cancel(): NonBlocking[Unit] =
+        cancel(null)
+
     final def cancelAndJoin(): Blocking[Unit] =
         cancelAndJoin(null)
 
@@ -23,6 +26,7 @@ trait Job[+A]:
     final def cancelAndAwaitOutcome(exception: InterruptedException | Null): Blocking[Outcome[A]] =
         cancelAndJoin(exception)
         outcome.nn
+end Job
 
 object Job:
     def completed[A](value: Outcome[A]): Job[A] =
