@@ -1,6 +1,7 @@
 package directio
 
 import directio.platform.*
+import scala.util.control.NonFatal
 
 type Poll[A] = Blocking[A] => NonBlocking[A]
 
@@ -12,7 +13,29 @@ trait Async extends Sync:
 
     def uncancellable[A](block: Poll[A] => Blocking[A]): Blocking[A]
 
-    def guaranteeCase[A](block: Blocking[A])(finalizer: Outcome[A] => Blocking[Unit]): Blocking[A]
+    def guaranteeCase[A](block: Blocking[A])(finalizer: Outcome[A] => Blocking[Unit]): Blocking[A] =
+        var isFinalizerException = false
+        try
+            val ret = block
+            isFinalizerException = true
+            finalizer(Outcome.Success(ret))
+            ret
+        catch
+            case NonFatal(e) if !isFinalizerException =>
+                try
+                    finalizer(Outcome.Failure(e))
+                catch
+                    case NonFatal(e2) =>
+                        e.addSuppressed(e2)
+                throw e
+            case e: InterruptedException if !isFinalizerException =>
+                try
+                    finalizer(Outcome.Cancelled(e))
+                catch
+                    case NonFatal(e2) =>
+                        e.addSuppressed(e2)
+                throw e
+end Async
 
 object Async:
     object unsafe:
