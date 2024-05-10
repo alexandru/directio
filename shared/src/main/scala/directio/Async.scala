@@ -6,11 +6,10 @@ import scala.util.control.NonFatal
 type Poll[A] = Blocking[A] => NonBlocking[A]
 
 trait Async extends Sync:
-    def createUncancellableFiber[A](block: Fiber[A] ?=> Blocking[A]): NonBlocking[Fiber[A]]
-    def createCancellableFiber[A](block: Fiber[A] ?=> Blocking[A]): NonBlocking[Fiber[A]]
-
     def cede: Blocking[Unit]
-
+    def cont[A](block: Continuation[A] => Blocking[A]): Blocking[A]
+    def createCancellableFiber[A](block: Fiber[A] ?=> Blocking[A]): NonBlocking[Fiber[A]]
+    def createUncancellableFiber[A](block: Fiber[A] ?=> Blocking[A]): NonBlocking[Fiber[A]]
     def uncancellable[A](block: Poll[A] => Blocking[A]): Blocking[A]
 
     def guaranteeCase[A](block: Blocking[A])(finalizer: Outcome[A] => Blocking[Unit]): Blocking[A] =

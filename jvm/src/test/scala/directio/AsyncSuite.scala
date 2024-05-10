@@ -168,8 +168,8 @@ class AsyncSuite extends munit.FunSuite:
 
             fiber.start()
             step1FiberStarted.awaitAndAssert(5.seconds)
-            step2AwaitSome.countDown()
             fiber.cancel()
+            step2AwaitSome.countDown()
             assert(fiber.awaitOutcome().isCancelled)
             assert(hasResult.get == false)
 

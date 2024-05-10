@@ -17,3 +17,6 @@ private[directio] class AsyncIntrinsics extends SyncIntrinsics with Async:
 
     def uncancellable[A](block: Poll[A] => Blocking[A]): Blocking[A] =
         directio.platform.uncancellable(block)
+
+    def cont[A](block: Continuation[A] => Blocking[A]): Blocking[A] = ???
+    // directio.platform.cont(block)
